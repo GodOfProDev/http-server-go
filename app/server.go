@@ -79,63 +79,23 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	req := NewHTTPRequest(data)
 
-	if req.Method == "GET" {
-		var shouldReturn bool
-		func() {
-			path := req.Path
+	callbackGet, okGet := s.GetPathMap[req.Path]
+	callbackPost, okPost := s.PostPathMap[req.Path]
 
-			callback, ok := s.GetPathMap[path]
-			var response HTTPResponse
-			if !ok {
-				return
-			} else {
-				response = callback(req)
-			}
+	response := NewHTTPResponse(NOTFOUND)
 
-			writeToConnection(response.String(), conn)
-
-			shouldReturn = true
-		}()
-
-		if shouldReturn {
-			return
-		}
-	} else if req.Method == "POST" {
-		var shouldReturn bool
-
-		func() {
-			var path string
-
-			if strings.Contains(req.Path, "/files") {
-				path = "/files/*"
-			} else {
-				path = req.Path
-			}
-
-			callback, ok := s.PostPathMap[path]
-			var response HTTPResponse
-			if !ok {
-				return
-			} else {
-				response = callback(req)
-			}
-			writeToConnection(response.String(), conn)
-
-			shouldReturn = true
-		}()
-
-		if shouldReturn {
-			return
-		}
+	if !okGet && okPost {
+		response = callbackPost(req)
+	} else if okGet && !okPost {
+		response = callbackGet(req)
 	}
 
 	for r, callbackFunc := range s.GetPathWildcardsMap {
 		matches := r.FindStringSubmatch(req.Path)
 
 		if len(matches) > 1 {
-			response := callbackFunc(req)
-			writeToConnection(response.String(), conn)
-			return
+			response = callbackFunc(req)
+			break
 		}
 	}
 
@@ -143,14 +103,15 @@ func (s *Server) handleConnection(conn net.Conn) {
 		matches := r.FindStringSubmatch(req.Path)
 
 		if len(matches) > 1 {
-			response := callbackFunc(req)
-			writeToConnection(response.String(), conn)
-			return
+			response = callbackFunc(req)
+			break
 		}
 	}
 
-	response := NewHTTPResponse(NOTFOUND)
-	response.SetBody("404 page not found")
+	if response.StatusCode == NOTFOUND {
+		response.SetBody("404 page not found")
+	}
+
 	writeToConnection(response.String(), conn)
 
 	return
