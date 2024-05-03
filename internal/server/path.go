@@ -1,4 +1,4 @@
-package main
+package server
 
 type Path struct {
 	pathRaw         string

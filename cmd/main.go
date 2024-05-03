@@ -1,8 +1,9 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"github.com/godofprodev/http-server/internal/config"
+	"github.com/godofprodev/http-server/internal/server"
 	"io"
 	"log/slog"
 	"os"
@@ -12,14 +13,12 @@ import (
 func main() {
 	fmt.Println("Logs from your program will appear here!")
 
-	directoryPtr := flag.String("directory", "empty", "Set the current directory of the server")
+	cfg := config.NewConfig()
 
-	flag.Parse()
+	srv := server.NewServer(cfg)
 
-	server := NewServer(*directoryPtr)
-
-	server.Get("/", func(request HTTPRequest) HTTPResponse {
-		resp := NewHTTPResponse(OK)
+	srv.Get("/", func(request server.HTTPRequest) server.HTTPResponse {
+		resp := server.NewHTTPResponse(server.OK)
 
 		data := "<h1>Hello World</h1>"
 
@@ -30,8 +29,8 @@ func main() {
 		return resp
 	})
 
-	server.Get("/test", func(request HTTPRequest) HTTPResponse {
-		resp := NewHTTPResponse(OK)
+	srv.Get("/test", func(request server.HTTPRequest) server.HTTPResponse {
+		resp := server.NewHTTPResponse(server.OK)
 
 		data := `<h1 style="color: blue;">Hello From Test</h1><button style="color: red; background-color: black;">Click me</button>`
 
@@ -42,8 +41,8 @@ func main() {
 		return resp
 	})
 
-	server.Get("/user-agent", func(request HTTPRequest) HTTPResponse {
-		response := NewHTTPResponse(OK)
+	srv.Get("/user-agent", func(request server.HTTPRequest) server.HTTPResponse {
+		response := server.NewHTTPResponse(server.OK)
 
 		response.SetHeader("Content-Type", "text/plain")
 		response.SetHeader("Content-Length", fmt.Sprint(len(request.UserAgent)))
@@ -52,10 +51,10 @@ func main() {
 		return response
 	})
 
-	server.Get("/echo/*", func(request HTTPRequest) HTTPResponse {
+	srv.Get("/echo/*", func(request server.HTTPRequest) server.HTTPResponse {
 		echo, _ := strings.CutPrefix(request.Path, "/echo/")
 
-		response := NewHTTPResponse(OK)
+		response := server.NewHTTPResponse(server.OK)
 
 		response.SetHeader("Content-Type", "text/plain")
 		response.SetHeader("Content-Length", fmt.Sprint(len(echo)))
@@ -64,17 +63,17 @@ func main() {
 		return response
 	})
 
-	server.Get("/files/*", func(request HTTPRequest) HTTPResponse {
+	srv.Get("/files/*", func(request server.HTTPRequest) server.HTTPResponse {
 		fileName, _ := strings.CutPrefix(request.Path, "/files/")
-		fullPath := server.Directory + fileName
+		fullPath := srv.Config.Directory + fileName
 
 		_, err := os.Stat(fullPath)
 
 		if os.IsNotExist(err) {
-			return NewHTTPResponse(NOTFOUND)
+			return server.NewHTTPResponse(server.NOTFOUND)
 		}
 
-		response := NewHTTPResponse(OK)
+		response := server.NewHTTPResponse(server.OK)
 
 		file, _ := os.Open(fullPath)
 		defer file.Close()
@@ -89,11 +88,11 @@ func main() {
 		return response
 	})
 
-	server.Post("/files/*", func(request HTTPRequest) HTTPResponse {
+	srv.Post("/files/*", func(request server.HTTPRequest) server.HTTPResponse {
 		fileName, _ := strings.CutPrefix(request.Path, "/files/")
-		fullPath := server.Directory + fileName
+		fullPath := srv.Config.Directory + fileName
 
-		response := NewHTTPResponse(CREATED)
+		response := server.NewHTTPResponse(server.CREATED)
 
 		file, _ := os.Create(fullPath)
 		defer file.Close()
@@ -104,16 +103,16 @@ func main() {
 		return response
 	})
 
-	server.Get("/basketball/party/*", func(request HTTPRequest) HTTPResponse {
-		response := NewHTTPResponse(OK)
+	srv.Get("/basketball/party/*", func(request server.HTTPRequest) server.HTTPResponse {
+		response := server.NewHTTPResponse(server.OK)
 
 		response.SetBody("Let's play basketball and party")
 
 		return response
 	})
 
-	err := server.Start()
+	err := srv.Start()
 	if err != nil {
-		slog.Error("There was an issue running the server: ", err)
+		slog.Error("There was an issue running the srv: ", err)
 	}
 }

@@ -1,6 +1,8 @@
-package main
+package server
 
 import (
+	"github.com/godofprodev/http-server/internal/config"
+	"github.com/godofprodev/http-server/internal/util"
 	"log/slog"
 	"net"
 	"regexp"
@@ -8,7 +10,7 @@ import (
 )
 
 type Server struct {
-	Directory            string
+	Config               *config.Config
 	Listener             net.Listener
 	GetPathMap           map[string]CallbackFunc
 	PostPathMap          map[string]CallbackFunc
@@ -16,9 +18,9 @@ type Server struct {
 	PostPathWildcardsMap map[*regexp.Regexp]CallbackFunc
 }
 
-func NewServer(directory string) Server {
+func NewServer(cfg *config.Config) Server {
 	return Server{
-		Directory:            directory,
+		Config:               cfg,
 		GetPathMap:           make(map[string]CallbackFunc),
 		PostPathMap:          make(map[string]CallbackFunc),
 		GetPathWildcardsMap:  make(map[*regexp.Regexp]CallbackFunc),
@@ -112,7 +114,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		response.SetBody("404 page not found")
 	}
 
-	writeToConnection(response.String(), conn)
+	util.WriteToConnection(response.String(), conn)
 
 	return
 }
