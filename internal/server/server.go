@@ -29,11 +29,13 @@ func NewServer(cfg *config.Config) Server {
 }
 
 func (s *Server) Start() error {
-	listener, err := net.Listen("tcp", "0.0.0.0:4221")
+	listener, err := net.Listen("tcp", s.Config.FullAddr)
 	if err != nil {
 		return err
 	}
 	s.Listener = listener
+
+	slog.Info("Listening on " + s.Config.FullAddr)
 
 	for {
 		conn, err := s.Listener.Accept()
