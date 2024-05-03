@@ -42,10 +42,6 @@ func main() {
 		return resp
 	})
 
-	//server.Get("/", func(request HTTPRequest) HTTPResponse {
-	//	return NewHTTPResponse(200)
-	//})
-
 	server.Get("/user-agent", func(request HTTPRequest) HTTPResponse {
 		response := NewHTTPResponse(OK)
 
@@ -104,6 +100,14 @@ func main() {
 
 		data := []byte(request.Body)
 		file.Write(data)
+
+		return response
+	})
+
+	server.Get("/basketball/party/*", func(request HTTPRequest) HTTPResponse {
+		response := NewHTTPResponse(OK)
+
+		response.SetBody("Let's play basketball and party")
 
 		return response
 	})

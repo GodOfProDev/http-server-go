@@ -6,21 +6,26 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 )
 
 type Server struct {
-	Directory   string
-	Listener    net.Listener
-	GetPathMap  map[string]CallbackFunc
-	PostPathMap map[string]CallbackFunc
+	Directory            string
+	Listener             net.Listener
+	GetPathMap           map[string]CallbackFunc
+	PostPathMap          map[string]CallbackFunc
+	GetPathWildcardsMap  map[*regexp.Regexp]CallbackFunc
+	PostPathWildcardsMap map[*regexp.Regexp]CallbackFunc
 }
 
 func NewServer(directory string) Server {
 	return Server{
-		Directory:   directory,
-		GetPathMap:  make(map[string]CallbackFunc),
-		PostPathMap: make(map[string]CallbackFunc),
+		Directory:            directory,
+		GetPathMap:           make(map[string]CallbackFunc),
+		PostPathMap:          make(map[string]CallbackFunc),
+		GetPathWildcardsMap:  make(map[*regexp.Regexp]CallbackFunc),
+		PostPathWildcardsMap: make(map[*regexp.Regexp]CallbackFunc),
 	}
 }
 
@@ -44,10 +49,22 @@ func (s *Server) Start() error {
 type CallbackFunc func(request HTTPRequest) HTTPResponse
 
 func (s *Server) Get(path string, callback CallbackFunc) {
+	if strings.Contains(path, "/*") {
+		str := strings.ReplaceAll(path, "/*", "(.*)")
+		reg, _ := regexp.Compile(str)
+		s.GetPathWildcardsMap[reg] = callback
+	}
+
 	s.GetPathMap[path] = callback
 }
 
 func (s *Server) Post(path string, callback CallbackFunc) {
+	if strings.Contains(path, "/*") {
+		str := strings.ReplaceAll(path, "/*", "(.*)")
+		reg, _ := regexp.Compile(str)
+		s.PostPathWildcardsMap[reg] = callback
+	}
+
 	s.PostPathMap[path] = callback
 }
 
@@ -66,44 +83,78 @@ func (s *Server) handleConnection(conn net.Conn) {
 	req := NewHTTPRequest(data)
 
 	if req.Method == "GET" {
-		var path string
+		var shouldReturn bool
+		func() {
+			path := req.Path
 
-		// TODO: MAKE WILDCARDS AND DON'T HARDCODE LIKE THIS
-		if strings.Contains(req.Path, "/echo") {
-			path = "/echo/*"
-		} else if strings.Contains(req.Path, "/files") {
-			path = "/files/*"
-		} else {
-			path = req.Path
+			callback, ok := s.GetPathMap[path]
+			var response HTTPResponse
+			if !ok {
+				return
+			} else {
+				response = callback(req)
+			}
+
+			writeToConnection(response.String(), conn)
+
+			shouldReturn = true
+		}()
+
+		if shouldReturn {
+			return
 		}
-
-		callback, ok := s.GetPathMap[path]
-		var response HTTPResponse
-		if !ok {
-			response = NewHTTPResponse(NOTFOUND)
-		} else {
-			response = callback(req)
-		}
-
-		writeToConnection(response.String(), conn)
 	} else if req.Method == "POST" {
-		var path string
+		var shouldReturn bool
 
-		if strings.Contains(req.Path, "/files") {
-			path = "/files/*"
-		} else {
-			path = req.Path
-		}
+		func() {
+			var path string
 
-		callback, ok := s.PostPathMap[path]
-		var response HTTPResponse
-		if !ok {
-			response = NewHTTPResponse(NOTFOUND)
-		} else {
-			response = callback(req)
+			if strings.Contains(req.Path, "/files") {
+				path = "/files/*"
+			} else {
+				path = req.Path
+			}
+
+			callback, ok := s.PostPathMap[path]
+			var response HTTPResponse
+			if !ok {
+				return
+			} else {
+				response = callback(req)
+			}
+			writeToConnection(response.String(), conn)
+
+			shouldReturn = true
+		}()
+
+		if shouldReturn {
+			return
 		}
-		writeToConnection(response.String(), conn)
 	}
+
+	for r, callbackFunc := range s.GetPathWildcardsMap {
+		matches := r.FindStringSubmatch(req.Path)
+
+		if len(matches) > 1 {
+			response := callbackFunc(req)
+			writeToConnection(response.String(), conn)
+			return
+		}
+	}
+
+	for r, callbackFunc := range s.PostPathWildcardsMap {
+		matches := r.FindStringSubmatch(req.Path)
+
+		if len(matches) > 1 {
+			response := callbackFunc(req)
+			writeToConnection(response.String(), conn)
+			return
+		}
+	}
+
+	response := NewHTTPResponse(NOTFOUND)
+	response.SetBody("404 page not found")
+	writeToConnection(response.String(), conn)
 
 	return
 
